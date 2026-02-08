@@ -20,12 +20,12 @@ Sourcing-Automation/
 
 - Windows 10/11
 - Python 3.10 이상
-- Google Chrome 브라우저 설치 필요 (undetected-chromedriver가 설치된 Chrome 사용)
+
 
 ## 1) 설치 (더블 클릭)
 
 1. `install.bat`을 **더블 클릭**합니다.
-2. 가상환경 생성 후 필요한 라이브러리가 자동으로 설치됩니다.
+
 3. 설치가 끝나면 창이 자동으로 멈추며, 아무 키나 누르면 종료됩니다.
 
 ## 2) 입력 파일 준비
@@ -80,4 +80,3 @@ python src/main.py --test
 ## 주의 사항
 
 - 쿠팡 UI 구조가 변경되면 배지 판별 로직이 달라질 수 있습니다.
-- 보안 프로그램이 Chrome 실행을 막을 수 있습니다.
