@@ -1,12 +1,13 @@
 import argparse
 import os
 import random
+
 import time
 from dataclasses import dataclass
 from typing import List, Optional
 
 import pandas as pd
-from playwright.sync_api import Browser, BrowserContext, sync_playwright
+
 
 
 @dataclass
@@ -66,14 +67,7 @@ def load_keywords(input_path: str) -> List[str]:
 
 def load_existing_results(output_path: str) -> pd.DataFrame:
     if not os.path.exists(output_path):
-        return pd.DataFrame(columns=[
-            "키워드",
-            "상위10개중개수",
-            "로켓배송개수",
-            "로켓비율",
-            "판정",
-            "오류",
-        ])
+
     return pd.read_excel(output_path, sheet_name="main")
 
 
@@ -88,11 +82,7 @@ def build_search_url(keyword: str) -> str:
     return f"https://www.coupang.com/np/search?q={keyword}&channel=user"
 
 
-def build_random_viewport() -> dict:
-    return {
-        "width": random.randint(1280, 1920),
-        "height": random.randint(720, 1080),
-    }
+
 
 
 def build_random_user_agent() -> str:
@@ -105,33 +95,7 @@ def build_random_user_agent() -> str:
     return random.choice(user_agents)
 
 
-def prepare_context(browser: Browser) -> BrowserContext:
-    context = browser.new_context(
-        user_agent=build_random_user_agent(),
-        viewport=build_random_viewport(),
-        locale="ko-KR",
-    )
-    context.add_init_script(
-        "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
-    )
-    return context
 
-
-def human_like_scroll(page) -> None:
-    scroll_times = random.randint(3, 6)
-    for _ in range(scroll_times):
-        distance = random.randint(300, 700)
-        page.mouse.wheel(0, distance)
-        time.sleep(random.uniform(0.6, 1.6))
-
-
-def human_like_mouse(page) -> None:
-    moves = random.randint(4, 8)
-    for _ in range(moves):
-        x = random.randint(100, 900)
-        y = random.randint(100, 700)
-        page.mouse.move(x, y, steps=random.randint(5, 20))
-        time.sleep(random.uniform(0.2, 0.8))
 
 
 def extract_rank_text(item) -> str:
@@ -142,9 +106,7 @@ def extract_rank_text(item) -> str:
         ".product-rank",
     ]
     for selector in rank_selectors:
-        locator = item.locator(selector)
-        if locator.count() > 0:
-            text = locator.first.inner_text().strip()
+
             if text:
                 return text
     return ""
@@ -171,9 +133,7 @@ def detect_ad(item) -> bool:
         ".ad-badge",
     ]
     for selector in ad_selectors:
-        if item.locator(selector).count() > 0:
-            return True
-    item_text = item.inner_text()
+
     return "AD" in item_text or "광고" in item_text
 
 
@@ -184,9 +144,7 @@ def extract_product_name(item) -> str:
         "a.search-product-link",
     ]
     for selector in name_selectors:
-        locator = item.locator(selector)
-        if locator.count() > 0:
-            text = locator.first.inner_text().strip()
+
             if text:
                 return text
     return ""
