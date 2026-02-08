@@ -1,21 +1,13 @@
 import argparse
 import os
 import random
-import shutil
-import subprocess
-import tempfile
+
 import time
 from dataclasses import dataclass
 from typing import List, Optional
 
 import pandas as pd
-from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
-from selenium.webdriver import ActionChains
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support import expected_conditions as ec
-from selenium.webdriver.support.ui import WebDriverWait
+
 
 
 @dataclass
@@ -62,24 +54,20 @@ def load_keywords(input_path: str) -> List[str]:
     data = pd.read_excel(input_path)
     if "키워드" not in data.columns:
         raise ValueError("엑셀에 '키워드' 컬럼이 없습니다.")
-    keywords = data["키워드"]
-    keywords = keywords.dropna().astype(str).map(str.strip)
-    keywords = keywords.loc[lambda series: series != ""].tolist()
+    keywords = (
+        data["키워드"]
+        .dropna()
+        .astype(str)
+        .map(str.strip)
+        .loc[lambda series: series != ""]
+        .tolist()
+    )
     return keywords
 
 
 def load_existing_results(output_path: str) -> pd.DataFrame:
     if not os.path.exists(output_path):
-        return pd.DataFrame(
-            columns=[
-                "키워드",
-                "상위10개중개수",
-                "로켓배송개수",
-                "로켓비율",
-                "판정",
-                "오류",
-            ]
-        )
+
     return pd.read_excel(output_path, sheet_name="main")
 
 
@@ -94,8 +82,7 @@ def build_search_url(keyword: str) -> str:
     return f"https://www.coupang.com/np/search?q={keyword}&channel=user"
 
 
-def build_random_viewport() -> tuple[int, int]:
-    return random.randint(1280, 1920), random.randint(720, 1080)
+
 
 
 def build_random_user_agent() -> str:
@@ -108,130 +95,7 @@ def build_random_user_agent() -> str:
     return random.choice(user_agents)
 
 
-def find_chrome_path() -> str:
-    candidates = [
-        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-    ]
-    for path in candidates:
-        if os.path.exists(path):
-            return path
-    raise FileNotFoundError("Chrome 경로를 찾을 수 없습니다. Chrome 설치 여부를 확인하세요.")
 
-
-def create_driver() -> tuple[webdriver.Chrome, str, subprocess.Popen]:
-    profile_dir = tempfile.mkdtemp(prefix="coupang_profile_")
-    width, height = build_random_viewport()
-    chrome_path = find_chrome_path()
-
-    debug_port = 9222
-    creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
-    process = subprocess.Popen(
-        [
-            chrome_path,
-            f"--remote-debugging-port={debug_port}",
-            f'--user-data-dir={profile_dir}',
-            f"--window-size={width},{height}",
-            "--no-first-run",
-            "--no-default-browser-check",
-            "--disable-popup-blocking",
-        ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        creationflags=creation_flags,
-    )
-    time.sleep(random.uniform(1.5, 3.0))
-
-    options = webdriver.ChromeOptions()
-    options.add_experimental_option("debuggerAddress", f"127.0.0.1:{debug_port}")
-    options.add_argument(f"--user-agent={build_random_user_agent()}")
-
-    driver = webdriver.Chrome(options=options)
-    driver.set_page_load_timeout(60)
-    return driver, profile_dir, process
-
-
-def cleanup_driver(driver: webdriver.Chrome, profile_dir: str, process: subprocess.Popen) -> None:
-    try:
-        driver.quit()
-    finally:
-        process.terminate()
-        try:
-            process.wait(timeout=10)
-        except Exception:
-            process.kill()
-        shutil.rmtree(profile_dir, ignore_errors=True)
-
-
-def human_like_scroll(driver: webdriver.Chrome) -> None:
-    scroll_times = random.randint(3, 6)
-    for _ in range(scroll_times):
-        distance = random.randint(300, 700)
-        driver.execute_script("window.scrollBy(0, arguments[0]);", distance)
-        time.sleep(random.uniform(0.6, 1.6))
-
-
-def human_like_mouse(driver: webdriver.Chrome) -> None:
-    try:
-        action = ActionChains(driver)
-        moves = random.randint(4, 8)
-        for _ in range(moves):
-            x_offset = random.randint(5, 80)
-            y_offset = random.randint(5, 80)
-            action.move_by_offset(x_offset, y_offset).perform()
-            time.sleep(random.uniform(0.2, 0.8))
-    except Exception:
-        pass
-
-
-def type_like_human(element, keyword: str) -> None:
-    element.click()
-    for char in keyword:
-        element.send_keys(char)
-        time.sleep(random.uniform(0.05, 0.18))
-
-
-def accept_cookie_popup(driver: webdriver.Chrome) -> None:
-    selectors = [
-        (By.CSS_SELECTOR, "button#onetrust-accept-btn-handler"),
-        (By.XPATH, "//button[contains(., '모두 동의')]"),
-        (By.XPATH, "//button[contains(., '동의')]"),
-        (By.XPATH, "//button[contains(., 'Accept')]"),
-    ]
-    for by, selector in selectors:
-        elements = driver.find_elements(by, selector)
-        if elements:
-            elements[0].click()
-            time.sleep(random.uniform(0.6, 1.2))
-            break
-
-
-def is_access_denied(driver: webdriver.Chrome) -> bool:
-    title = driver.title
-    if "Access Denied" in title or "접근이 거부" in title:
-        return True
-    source = driver.page_source
-    return "Access Denied" in source or "접근이 거부" in source
-
-
-def open_search_from_home(driver: webdriver.Chrome, keyword: str) -> None:
-    driver.get("https://www.coupang.com")
-    time.sleep(random.uniform(3, 5))
-    accept_cookie_popup(driver)
-    selectors = [
-        "input[name='q']",
-        "input#headerSearchKeyword",
-        "input[placeholder*='검색']",
-    ]
-    for selector in selectors:
-        try:
-            element = driver.find_element(By.CSS_SELECTOR, selector)
-            type_like_human(element, keyword)
-            element.send_keys(Keys.ENTER)
-            return
-        except NoSuchElementException:
-            continue
-    driver.get(build_search_url(keyword))
 
 
 def extract_rank_text(item) -> str:
@@ -242,9 +106,7 @@ def extract_rank_text(item) -> str:
         ".product-rank",
     ]
     for selector in rank_selectors:
-        elements = item.find_elements(By.CSS_SELECTOR, selector)
-        if elements:
-            text = elements[0].text.strip()
+
             if text:
                 return text
     return ""
@@ -271,9 +133,7 @@ def detect_ad(item) -> bool:
         ".ad-badge",
     ]
     for selector in ad_selectors:
-        if item.find_elements(By.CSS_SELECTOR, selector):
-            return True
-    item_text = item.text
+
     return "AD" in item_text or "광고" in item_text
 
 
@@ -284,9 +144,7 @@ def extract_product_name(item) -> str:
         "a.search-product-link",
     ]
     for selector in name_selectors:
-        elements = item.find_elements(By.CSS_SELECTOR, selector)
-        if elements:
-            text = elements[0].text.strip()
+
             if text:
                 return text
     return ""
@@ -294,10 +152,11 @@ def extract_product_name(item) -> str:
 
 def detect_rocket_badge(item) -> str:
     badge_texts = []
-    badge_elements = item.find_elements(By.CSS_SELECTOR, "img[alt], span, em, i")
-    for element in badge_elements[:20]:
+    badge_locators = item.locator("img[alt], span, em, i")
+    for index in range(min(20, badge_locators.count())):
+        element = badge_locators.nth(index)
         alt_text = element.get_attribute("alt") or ""
-        text = element.text.strip()
+        text = element.inner_text().strip()
         combined = f"{alt_text} {text}".strip()
         if combined:
             badge_texts.append(combined)
@@ -309,29 +168,27 @@ def detect_rocket_badge(item) -> str:
     return "뱃지없음"
 
 
-def analyze_keyword(keyword: str, test_mode: bool) -> SearchResult:
+def analyze_keyword(browser: Browser, keyword: str, test_mode: bool) -> SearchResult:
     organic_count = 0
     rocket_count = 0
     error_message = ""
     debug_items = []
 
-    driver, profile_dir, process = create_driver()
+    context = prepare_context(browser)
+    page = context.new_page()
     try:
-        open_search_from_home(driver, keyword)
-        WebDriverWait(driver, 30).until(ec.presence_of_element_located((By.CSS_SELECTOR, "li.search-product")))
+        page.goto(build_search_url(keyword), wait_until="domcontentloaded", timeout=60000)
+        page.wait_for_selector("li.search-product", timeout=30000)
         time.sleep(random.uniform(1.0, 2.2))
-        human_like_scroll(driver)
-        human_like_mouse(driver)
+        human_like_scroll(page)
+        human_like_mouse(page)
 
-        if is_access_denied(driver):
-            time.sleep(random.uniform(30, 60))
-            open_search_from_home(driver, keyword)
-            WebDriverWait(driver, 30).until(ec.presence_of_element_located((By.CSS_SELECTOR, "li.search-product")))
-
-        items = driver.find_elements(By.CSS_SELECTOR, "li.search-product")
+        items = page.locator("li.search-product")
+        total_items = items.count()
         ranked_items = {}
 
-        for item in items:
+        for index in range(total_items):
+            item = items.nth(index)
             rank_text = extract_rank_text(item)
             rank_number = parse_rank_number(rank_text)
             is_ad = detect_ad(item)
@@ -364,18 +221,18 @@ def analyze_keyword(keyword: str, test_mode: bool) -> SearchResult:
 
         if test_mode:
             with open(os.path.join("output", "debug.html"), "w", encoding="utf-8") as file:
-                file.write(driver.page_source)
-            driver.save_screenshot(os.path.join("output", "debug.png"))
+                file.write(page.content())
+            page.screenshot(path=os.path.join("output", "debug.png"), full_page=True)
             for item in debug_items:
                 rank_label = item["rank_text"] or "순위없음"
                 name_label = item["product_name"] or "상품명없음"
                 ad_label = "광고" if item["is_ad"] else "자연노출"
                 badge_label = item["badge_type"]
                 print(f"[TEST] {rank_label} | {name_label} | {ad_label} | {badge_label}")
-    except (TimeoutException, Exception) as exc:
+    except Exception as exc:
         error_message = str(exc)
     finally:
-        cleanup_driver(driver, profile_dir, process)
+        context.close()
 
     ratio = rocket_count / organic_count if organic_count else 0.0
     verdict = "PASS" if rocket_count <= 5 else "FAIL"
@@ -407,59 +264,70 @@ def main() -> None:
     if args.test and keywords:
         keywords = keywords[:1]
 
-    for index, keyword in enumerate(keywords, start=1):
-        if keyword in completed:
-            continue
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=False)
+        processed_since_restart = 0
+        restart_after = random.randint(10, 15)
 
-        last_error = ""
-        result: Optional[SearchResult] = None
+        for index, keyword in enumerate(keywords, start=1):
+            if keyword in completed:
+                continue
+            if processed_since_restart >= restart_after:
+                browser.close()
+                browser = playwright.chromium.launch(headless=False)
+                processed_since_restart = 0
+                restart_after = random.randint(10, 15)
 
-        for attempt in range(1, 4):
-            try:
-                result = analyze_keyword(keyword, args.test)
-                last_error = result.error
-                if not last_error:
-                    break
-            except Exception as exc:
-                last_error = str(exc)
-            time.sleep(2)
+            last_error = ""
+            result: Optional[SearchResult] = None
 
-        if result is None:
-            result = SearchResult(
-                keyword=keyword,
-                organic_count=0,
-                rocket_count=0,
-                rocket_ratio=0.0,
-                verdict="FAIL",
-                error=last_error,
+            for attempt in range(1, 4):
+                try:
+                    result = analyze_keyword(browser, keyword, args.test)
+                    last_error = result.error
+                    if not last_error:
+                        break
+                except Exception as exc:
+                    last_error = str(exc)
+                time.sleep(2)
+
+            if result is None:
+                result = SearchResult(
+                    keyword=keyword,
+                    organic_count=0,
+                    rocket_count=0,
+                    rocket_ratio=0.0,
+                    verdict="FAIL",
+                    error=last_error,
+                )
+            elif last_error:
+                result = SearchResult(
+                    keyword=keyword,
+                    organic_count=result.organic_count,
+                    rocket_count=result.rocket_count,
+                    rocket_ratio=result.rocket_ratio,
+                    verdict="FAIL",
+                    error=last_error,
+                )
+
+            new_row = {
+                "키워드": result.keyword,
+                "상위10개중개수": result.organic_count,
+                "로켓배송개수": result.rocket_count,
+                "로켓비율": round(result.rocket_ratio, 4),
+                "판정": result.verdict,
+                "오류": result.error,
+            }
+            all_results = pd.concat([all_results, pd.DataFrame([new_row])], ignore_index=True)
+            save_results(output_path, all_results)
+
+            print(
+                f"[{index}/{len(keywords)}] {keyword} 검색 중... "
+                f"로켓배송 {result.rocket_count}개/{result.organic_count}개 → {result.verdict}"
             )
-        elif last_error:
-            result = SearchResult(
-                keyword=keyword,
-                organic_count=result.organic_count,
-                rocket_count=result.rocket_count,
-                rocket_ratio=result.rocket_ratio,
-                verdict="FAIL",
-                error=last_error,
-            )
 
-        new_row = {
-            "키워드": result.keyword,
-            "상위10개중개수": result.organic_count,
-            "로켓배송개수": result.rocket_count,
-            "로켓비율": round(result.rocket_ratio, 4),
-            "판정": result.verdict,
-            "오류": result.error,
-        }
-        all_results = pd.concat([all_results, pd.DataFrame([new_row])], ignore_index=True)
-        save_results(output_path, all_results)
-
-        print(
-            f"[{index}/{len(keywords)}] {keyword} 검색 중... "
-            f"로켓배송 {result.rocket_count}개/{result.organic_count}개 → {result.verdict}"
-        )
-
-        time.sleep(random.uniform(5, 12))
+            processed_since_restart += 1
+            time.sleep(random.uniform(5, 12))
 
 
 if __name__ == "__main__":
